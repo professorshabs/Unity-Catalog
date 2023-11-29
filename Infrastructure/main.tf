@@ -1,3 +1,4 @@
+# Terraform block defining required providers for Azure and Databricks
 terraform {
   required_providers {
     azurerm = {
@@ -10,14 +11,13 @@ terraform {
     }
   }
 }
-
+# Variable for Databricks account ID
 variable "databricks_account_id" {
   description = "The Databricks account ID"
-  default     = "c200093d-f067-4c52-bdf2-5e0db7ead992" #c200093d-f067-4c52-bdf2-5e0db7ead992
-  sensitive   = true
+  sensitive   = true # Indicates this variable should be treated as sensitive
 }
 
-
+# Locals block defining computed values
 locals {
   location                  = "East US"
   resource_group_name       = "Shabs_Databricks_lakehouse"
@@ -31,42 +31,30 @@ locals {
   prefix                    = replace(replace(replace(lower(azurerm_resource_group.rg.name), "rg", ""), "-", ""),"_","")
 }
 
+# Azure provider block
 provider "azurerm" {
   #subscription_id = local.subscription_id
   features {}
 }
 
+# Databricks provider block
 provider "databricks" {
   host = local.databricks_workspace_host
 }
-# provider "databricks" {
-#   host                  = local.databricks_workspace_host
-#   azure_client_id       = local.client_id
-#   azure_tenant_id       = local.tenant_id
-#   account_id = var.databricks_account_id
-#   # azure_subscription_id = local.subscription_id
-#   # resource_group        = local.databricks_resource_group
-#   # workspace_name        = local.databricks_workspace_name
-# }
 
+# Databricks provider block with alias and configurations
 provider "databricks" {
   alias                 = "accounts"
   host                  = "https://${local.databricks_workspace_host}"
   account_id            = var.databricks_account_id
 }
 
-# provider "databricks" {
-#   alias      = "accounts"
-#   host       = "https://${local.databricks_workspace_host}" #"https://adb-3930630275790969.9.azuredatabricks.net/"
-#   #host       = "https://accounts.azuredatabricks.net"
-#   account_id = var.databricks_account_id
-# }
 
-
+# Data blocks to fetch Azure client configuration and subscription details
 data "azurerm_client_config" "current" {}
-
 data "azurerm_subscription" "current" {}
 
+# Azure resource group creation
 resource "azurerm_resource_group" "rg" {
   name     = local.resource_group_name
   location = local.location
@@ -87,6 +75,7 @@ resource "azurerm_resource_group" "rg" {
 #   is_hns_enabled           = true
 # }
 
+#Azure Storage account creation
 resource "azurerm_storage_account" "storage_account" {
   name                     = "shabsdatalake001"
   resource_group_name      = local.databricks_resource_group
@@ -97,6 +86,7 @@ resource "azurerm_storage_account" "storage_account" {
   is_hns_enabled           = true
 }
 
+# This block creates an Azure storage account test container.
 resource "azurerm_storage_container" "managed_container" {
   name                  = "raw"
   storage_account_name  = azurerm_storage_account.storage_account.name
@@ -104,6 +94,7 @@ resource "azurerm_storage_container" "managed_container" {
 }
 
 
+# This block creates an Azure key vault.
 resource "azurerm_key_vault" "key_vault" {
   name                = "shabs-kv-env001"
   location            = local.location
@@ -113,7 +104,7 @@ resource "azurerm_key_vault" "key_vault" {
 }
 
 
-##Databricks Access Connector
+# This block creates a Databricks access connector.
 resource "azurerm_databricks_access_connector" "access_connector" {
   name                = "shabs_accessconnector_env001"
   resource_group_name = azurerm_resource_group.rg.name
@@ -125,7 +116,7 @@ resource "azurerm_databricks_access_connector" "access_connector" {
   }
 }
 
-##Metastore Container
+# This block creates a metastore container.
 resource "azurerm_storage_container" "unity_catalog" {
   name                  = "${local.prefix}-container"
   storage_account_name  = azurerm_storage_account.storage_account.name
@@ -133,7 +124,7 @@ resource "azurerm_storage_container" "unity_catalog" {
 }
 
 
-## provides Unity Catalog permissions to access and manage data in the storage account
+# This block assigns a role to the Databricks access connector to allow it to access and manage data in the storage account.
 resource "azurerm_role_assignment" "role_assign" {
   scope                = azurerm_storage_account.storage_account.id
   role_definition_name = "Storage Blob Data Contributor"
@@ -147,20 +138,6 @@ resource "azurerm_databricks_workspace" "databricks" {
   location            = azurerm_resource_group.rg.location
   sku                 = "premium"
 }
-
-# data "azurerm_role_definition" "contributor" {
-#   name = "Contributor"
-# }
-
-# output "managed_resource_group_id" {
-#   value = azurerm_databricks_workspace.databricks.managed_resource_group_id
-# }
-
-# resource "azurerm_managed_services_registration_assignment" "databricks" {
-#   principal_id       = data.azurerm_client_config.current.client_id
-#   role_definition_id = data.azurerm_role_definition.contributor.id
-#   scope              = azurerm_databricks_workspace.databricks.managed_resource_group_id
-# }
 
 
 #Single metastore per region for an organization  and  each workspace will have the same view of the data you manage in Unity Catalog.
@@ -186,12 +163,14 @@ resource "databricks_metastore_data_access" "primary" {
   is_default = true
 }
 
+# This block assigns the metastore to a workspace.
 resource "databricks_metastore_assignment" "this" {
   provider             = databricks.accounts
   workspace_id         = local.databricks_workspace_id
   metastore_id         = databricks_metastore.metastore.id
 }
 
+# This block creates a storage credential.
 resource "databricks_storage_credential" "storage_external_cred" {
   name = "storage_external_credential_001"
   azure_managed_identity {

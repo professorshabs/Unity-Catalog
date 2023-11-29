@@ -11,9 +11,9 @@ User guide:
      4. Create Azure databricks access connector and grant it access to Gen 2 storage by going to IAM on Gen 2 and add role
 
 # Setup Azure CLI and Terraform
-Download Azure CLI and Terraform from offical websitea.
+Download Azure CLI and Terraform from offical websitea:
     Azure CLI login commands:
-        - az login OR az login --use-device-code OR az login --tenant <tenant ID>
+        - az login OR az login --use-device-code OR az login --tenant {tenant ID}
         - az extension add --upgrade -n account
         - az account show
 

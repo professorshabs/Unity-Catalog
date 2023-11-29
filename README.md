@@ -1,9 +1,11 @@
 # Introduction 
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
+Project on tech/feature test on personal capacity. It involves using Terraform to manage resources, and setup Unity Catalog.
+Use unity catalog to monitor databricks/pipelines
 
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
+# Setting Up Unity Catalog:
+User guide:
+1.	Resources requirements: 
+    
 2.	Software dependencies
 3.	Latest releases
 4.	API references

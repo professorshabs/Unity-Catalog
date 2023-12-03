@@ -11,25 +11,8 @@ terraform {
     }
   }
 }
-# Variable for Databricks account ID
-variable "databricks_account_id" {
-  description = "The Databricks account ID"
-  sensitive   = true # Indicates this variable should be treated as sensitive
-}
 
-# Locals block defining computed values
-locals {
-  location                  = "East US"
-  resource_group_name       = "Shabs_Databricks_lakehouse"
-  # client_id                 = data.azurerm_client_config.current.client_id
-  tenant_id                 = data.azurerm_client_config.current.tenant_id
-  subscription_id           = data.azurerm_subscription.current.subscription_id
-  databricks_workspace_host = azurerm_databricks_workspace.databricks.workspace_url
-  databricks_workspace_id   = azurerm_databricks_workspace.databricks.workspace_id
-  databricks_resource_group = azurerm_resource_group.rg.name
-  # databricks_workspace_name = azurerm_databricks_workspace.databricks.name
-  prefix                    = replace(replace(replace(lower(azurerm_resource_group.rg.name), "rg", ""), "-", ""),"_","")
-}
+
 
 # Azure provider block
 provider "azurerm" {
@@ -60,31 +43,23 @@ resource "azurerm_resource_group" "rg" {
   location = local.location
 }
 
-# resource "random_id" "storage_account_suffix" {
-#   byte_length = 8
-# }
-
-
-# resource "azurerm_storage_account" "storage_account" {
-#   name                     = "shabsdatalake${random_id.storage_account_suffix.hex}"
-#   resource_group_name      = azurerm_resource_group.rg.name
-#   location                 = local.location
-#   account_tier             = "Standard"
-#   account_replication_type = "LRS"
-#   account_kind             = "StorageV2"
-#   is_hns_enabled           = true
-# }
+#random number
+resource "random_id" "suffix" {
+  byte_length = 8
+}
 
 #Azure Storage account creation
 resource "azurerm_storage_account" "storage_account" {
-  name                     = "shabsdatalake001"
-  resource_group_name      = local.databricks_resource_group
+  name                     = var.storage_account_name
+  resource_group_name      = azurerm_resource_group.rg.name
   location                 = local.location
   account_tier             = "Standard"
   account_replication_type = "LRS"
   account_kind             = "StorageV2"
   is_hns_enabled           = true
 }
+
+
 
 # This block creates an Azure storage account test container.
 resource "azurerm_storage_container" "managed_container" {
@@ -96,7 +71,7 @@ resource "azurerm_storage_container" "managed_container" {
 
 # This block creates an Azure key vault.
 resource "azurerm_key_vault" "key_vault" {
-  name                = "shabs-kv-env001"
+  name                = "shabs-kv-env${random_id.suffix.hex}"
   location            = local.location
   resource_group_name = azurerm_resource_group.rg.name
   tenant_id           = data.azurerm_client_config.current.tenant_id
@@ -106,7 +81,7 @@ resource "azurerm_key_vault" "key_vault" {
 
 # This block creates a Databricks access connector.
 resource "azurerm_databricks_access_connector" "access_connector" {
-  name                = "shabs_accessconnector_env001"
+  name                = var.access_connector_name
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
 
@@ -118,7 +93,7 @@ resource "azurerm_databricks_access_connector" "access_connector" {
 
 # This block creates a metastore container.
 resource "azurerm_storage_container" "unity_catalog" {
-  name                  = "${local.prefix}-container"
+  name                  = "${local.prefix}${random_id.suffix.hex}"
   storage_account_name  = azurerm_storage_account.storage_account.name
   container_access_type = "private"
 }
@@ -133,7 +108,7 @@ resource "azurerm_role_assignment" "role_assign" {
 
 ##Creating a workspace
 resource "azurerm_databricks_workspace" "databricks" {
-  name                = "shabs_databricks_env001"
+  name                = var.workspace_name
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
   sku                 = "premium"
@@ -142,7 +117,7 @@ resource "azurerm_databricks_workspace" "databricks" {
 
 #Single metastore per region for an organization  and  each workspace will have the same view of the data you manage in Unity Catalog.
 resource "databricks_metastore" "metastore" {
-  name = "primary_metastore_eastus"
+  name = var.metastore_name
   storage_root = format("abfss://%s@%s.dfs.core.windows.net/",
     azurerm_storage_container.unity_catalog.name,
     azurerm_storage_account.storage_account.name)
@@ -155,7 +130,7 @@ resource "databricks_metastore" "metastore" {
 resource "databricks_metastore_data_access" "primary" {
   provider     = databricks.accounts
   metastore_id = databricks_metastore.metastore.id
-  name         = "metastore-cred"
+  name         = "metastore_storage_credentials"
   azure_managed_identity {
     access_connector_id = azurerm_databricks_access_connector.access_connector.id
   }
@@ -172,7 +147,7 @@ resource "databricks_metastore_assignment" "this" {
 
 # This block creates a storage credential.
 resource "databricks_storage_credential" "storage_external_cred" {
-  name = "storage_external_credential_001"
+  name = "external_storage_credential_${random_id.suffix.hex}"
   azure_managed_identity {
     access_connector_id = azurerm_databricks_access_connector.access_connector.id
   }
@@ -182,7 +157,7 @@ resource "databricks_storage_credential" "storage_external_cred" {
 
 resource "databricks_catalog" "catalog" {
   metastore_id = databricks_metastore.metastore.id
-  name         = "fdl_lakehouse"
+  name         = var.catalog_name
   comment      = "this catalog is managed by terraform"
   properties = {
     purpose = "testing"
